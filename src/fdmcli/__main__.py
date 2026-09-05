@@ -31,6 +31,37 @@ COMMAND_HELP = {
 }
 
 
+class Style:
+    """Small dependency-free terminal theme with automatic color detection."""
+
+    def __init__(self, enabled: bool) -> None:
+        self.enabled = enabled
+
+    def paint(self, text: Any, color: str) -> str:
+        if not self.enabled:
+            return str(text)
+        return f"\033[{color}m{text}\033[0m"
+
+    def title(self, text: Any) -> str:
+        return self.paint(text, "1;36")
+
+    def label(self, text: Any) -> str:
+        return self.paint(text, "2;37")
+
+    def good(self, text: Any) -> str:
+        return self.paint(text, "1;32")
+
+    def warn(self, text: Any) -> str:
+        return self.paint(text, "1;33")
+
+    def bad(self, text: Any) -> str:
+        return self.paint(text, "1;31")
+
+
+def _color_enabled(force_no_color: bool = False) -> bool:
+    return not force_no_color and "NO_COLOR" not in os.environ and sys.stdout.isatty()
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="fdm",
@@ -65,6 +96,7 @@ def build_parser() -> argparse.ArgumentParser:
     output = parser.add_argument_group("output")
     output.add_argument("--json", action="store_true", help="Print machine-readable JSON")
     output.add_argument("--compact", dest="json", action="store_true", help=argparse.SUPPRESS)
+    output.add_argument("--no-color", action="store_true", help="Disable colored terminal output")
     parser.add_argument("--version", dest="show_version", action="store_true", help="Show the installed version and check for updates")
     subparsers = parser.add_subparsers(dest="command", required=True)
     for name in COMMANDS:
@@ -99,40 +131,56 @@ def _value(data: dict[str, Any], *keys: str, default: Any = None) -> Any:
     return default
 
 
-def _print_human(command: str, response: dict[str, Any]) -> None:
+def _print_human(command: str, response: dict[str, Any], style: Style) -> None:
     if command == "status":
         status = response.get("Status", {})
         current = _value(status, "CurrentStatus", default="unknown")
         status_names = {0: "Idle", 1: "Printing", 2: "Paused", 3: "Complete", 4: "Stopped"}
         if isinstance(current, list) and current:
             current = status_names.get(current[0], f"Code {current[0]}")
-        print(f"Printer status: {current}")
-        print(f"Position:       {_value(status, 'CurrenCoord', 'CurrentCoord', default='unknown')}")
+        current_text = str(current)
+        current_view = style.good(current_text) if current_text in {"Idle", "Complete"} else style.warn(current_text)
+        print()
+        print(style.title("  PRINTER STATUS"))
+        print(style.label("  +----------------+------------------------------+"))
+        print(f"  | {style.label('State'):<14} | {current_view:<28} |")
+        print(f"  | {style.label('Position'):<14} | {_value(status, 'CurrenCoord', 'CurrentCoord', default='unknown')!s:<28} |")
         for label, key in (("Hotbed", "TempOfHotbed"), ("Nozzle", "TempOfNozzle"), ("Enclosure", "TempOfBox")):
             temperature = _value(status, key, default="unknown")
             if isinstance(temperature, (float, int)):
                 temperature = f"{temperature:.1f} C"
-            print(f"{label + ':':<16}{temperature}")
+            print(f"  | {style.label(label):<14} | {str(temperature):<28} |")
+        print(style.label("  +----------------+------------------------------+"))
         info = status.get("PrintInfo", {})
         if info.get("Filename") or info.get("Progress"):
-            print(f"Print:          {info.get('Filename') or 'unnamed'} ({info.get('Progress', 0)}%)")
+            progress = float(info.get("Progress", 0) or 0)
+            filled = min(20, max(0, round(progress / 5)))
+            bar = "#" * filled + "-" * (20 - filled)
+            print(f"  {style.label('Print')} {info.get('Filename') or 'unnamed'}")
+            print(f"  [{style.good(bar) if progress >= 100 else bar}] {progress:.0f}%")
+        print()
         return
     if command == "attributes":
         attributes = response.get("Attributes", response.get("Data", {}))
+        print(style.title("  PRINTER INFORMATION"))
         for key, value in attributes.items():
-            print(f"{key}: {value}")
+            print(f"  {style.label(key + ':'):<28} {value}")
         return
     if command == "files":
         payload = response.get("Data", {}).get("Data", response.get("Data", {}))
         files = payload.get("FileList", [])
         if files:
-            for item in files:
-                print(item.get("name") or item.get("Name") or item)
+            print(style.title(f"  FILES ({len(files)})"))
+            for index, item in enumerate(files, 1):
+                print(f"  {index:>3}  {item.get('name') or item.get('Name') or item}")
         else:
-            print("No files reported by the printer.")
+            print(style.warn("  No files reported by the printer."))
         return
     ack = response.get("Data", {}).get("Ack")
-    print(f"{command.capitalize()} command sent successfully." if ack in (None, 0) else f"{command.capitalize()} command returned acknowledgment {ack}.")
+    if ack in (None, 0):
+        print(style.good(f"  OK  {command.capitalize()} command sent successfully."))
+    else:
+        print(style.bad(f"  ERROR  {command.capitalize()} command returned acknowledgment {ack}."))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -143,6 +191,7 @@ def main(argv: list[str] | None = None) -> int:
         _show_version()
         return 0
     args = build_parser().parse_args(argv)
+    style = Style(_color_enabled(args.no_color))
     if args.show_version:
         _show_version()
         return 0
@@ -172,7 +221,7 @@ def main(argv: list[str] | None = None) -> int:
         url = f"http://{args.host}/"
         if args.open:
             webbrowser.open(url)
-            print(f"Opened {url}")
+            print(style.good(f"Opened {url}"))
         else:
             print(url)
         return 0
@@ -186,15 +235,15 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "print" and not args.yes:
             answer = input(f"Start printing {args.file}? [y/N] ").strip().lower()
             if answer not in {"y", "yes"}:
-                print("Print cancelled.")
+                print(style.warn("Print cancelled."))
                 return 0
         client = PrinterClient(args.host, args.port, args.timeout)
         try:
-            print(f"Uploading {args.file}...")
-            client.upload(args.file, lambda progress: print(f"\rUpload: {progress:.0%}", end="", flush=True))
+            print(style.title("Uploading") + f" {args.file}")
+            client.upload(args.file, lambda progress: print(f"\r  [{('#' * round(progress * 20)).ljust(20, '-')}] {progress:.0%}", end="", flush=True))
             print()
             if args.command == "upload":
-                print("Upload complete.")
+                print(style.good("  OK  Upload complete."))
                 return 0
             files = client.command("files", {"Url": "/local"})
             payload = files.get("Data", {}).get("Data", files.get("Data", {}))
@@ -221,7 +270,7 @@ def main(argv: list[str] | None = None) -> int:
             if args.json:
                 print(json.dumps(response, indent=2))
             else:
-                print(f"Print started: {remote_name}")
+                print(style.good(f"  OK  Print started: {remote_name}"))
             return 0
         except (PrinterError, ValueError) as exc:
             print(f"fdm: error: {exc}", file=sys.stderr)
@@ -237,7 +286,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.json:
         print(json.dumps(response, indent=2))
     else:
-        _print_human(command, response)
+        _print_human(command, response, style)
     return 0
 
 

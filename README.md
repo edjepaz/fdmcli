@@ -79,6 +79,12 @@ fdm --json status | ConvertFrom-Json
 fdm --json --host printer.local status > status.json
 ```
 
+Interactive output uses a compact terminal layout with colors, status highlights, and progress bars. Colors automatically turn off when output is redirected. Disable them explicitly with `--no-color`, or set the standard `NO_COLOR` environment variable.
+
+```powershell
+fdm --no-color status
+```
+
 Run `fdm --help` or `fdm status --help` for built-in guidance. `info` is an alias for `attributes`, and `ls`/`list` are aliases for `files`. The older `--compact` flag remains accepted as an alias for `--json`.
 
 To open the printer's built-in web interface:

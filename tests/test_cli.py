@@ -1,4 +1,5 @@
 from fdmcli.__main__ import build_parser
+from fdmcli.__main__ import Style
 from fdmcli.client import COMMANDS
 
 
@@ -41,3 +42,7 @@ def test_parser_supports_release_commands():
     assert build_parser().parse_args(["versions"]).command == "versions"
     args = build_parser().parse_args(["upgrade", "v0.4.0"])
     assert args.version == "v0.4.0"
+
+
+def test_style_is_plain_when_disabled():
+    assert Style(False).good("ok") == "ok"
