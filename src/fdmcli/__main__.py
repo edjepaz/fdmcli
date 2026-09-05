@@ -144,16 +144,28 @@ def _print_human(command: str, response: dict[str, Any], style: Style) -> None:
             current = status_names.get(current[0], f"Code {current[0]}")
         current_text = str(current)
         current_view = style.good(current_text) if current_text in {"Idle", "Complete"} else style.warn(current_text)
+
+        def row(label: str, value: Any, value_style: str | None = None) -> str:
+            label_cell = style.label(f"{label:<14}")
+            value_text = f"{str(value):<28}"
+            if value_style == "good":
+                value_cell = style.good(value_text)
+            elif value_style == "warn":
+                value_cell = style.warn(value_text)
+            else:
+                value_cell = value_text
+            return f"  | {label_cell} | {value_cell} |"
+
         print()
         print(style.title("  PRINTER STATUS"))
         print(style.label("  +----------------+------------------------------+"))
-        print(f"  | {style.label('State'):<14} | {current_view:<28} |")
-        print(f"  | {style.label('Position'):<14} | {_value(status, 'CurrenCoord', 'CurrentCoord', default='unknown')!s:<28} |")
+        print(row("State", current_text, "good" if current_text in {"Idle", "Complete"} else "warn"))
+        print(row("Position", _value(status, "CurrenCoord", "CurrentCoord", default="unknown")))
         for label, key in (("Hotbed", "TempOfHotbed"), ("Nozzle", "TempOfNozzle"), ("Enclosure", "TempOfBox")):
             temperature = _value(status, key, default="unknown")
             if isinstance(temperature, (float, int)):
                 temperature = f"{temperature:.1f} C"
-            print(f"  | {style.label(label):<14} | {str(temperature):<28} |")
+            print(row(label, temperature))
         print(style.label("  +----------------+------------------------------+"))
         info = status.get("PrintInfo", {})
         if info.get("Filename") or info.get("Progress"):
@@ -168,7 +180,8 @@ def _print_human(command: str, response: dict[str, Any], style: Style) -> None:
         attributes = response.get("Attributes", response.get("Data", {}))
         print(style.title("  PRINTER INFORMATION"))
         for key, value in attributes.items():
-            print(f"  {style.label(key + ':'):<28} {value}")
+            label = f"{key}:"
+            print(f"  {style.label(f'{label:<26}')} {value}")
         return
     if command == "files":
         payload = response.get("Data", {}).get("Data", response.get("Data", {}))
