@@ -18,3 +18,13 @@ def test_parser_defaults_to_local_printer():
 def test_parser_supports_json_output():
     args = build_parser().parse_args(["--json", "status"])
     assert args.json
+
+
+def test_parser_supports_helpful_aliases():
+    assert build_parser().parse_args(["info"]).command == "info"
+    assert build_parser().parse_args(["ls"]).command == "ls"
+
+
+def test_parser_supports_web_command():
+    args = build_parser().parse_args(["web", "--open"])
+    assert args.open

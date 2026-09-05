@@ -18,11 +18,13 @@ py -m pip install -e ".[test]"
 
 ```powershell
 fdm status
-fdm attributes
+fdm info
 fdm files
+fdm ls
 fdm pause
 fdm resume
 fdm stop
+fdm web --open
 ```
 
 The default host is `192.168.1.249`, so the shortest command is `fdm status`. Override it with `--host` when using another printer:
@@ -31,6 +33,16 @@ The default host is `192.168.1.249`, so the shortest command is `fdm status`. Ov
 fdm --host printer.local status
 ```
 
+You can also set a default printer without repeating options:
+
+```powershell
+$env:FDM_HOST = "printer.local"
+$env:FDM_PORT = "3030"
+fdm status
+```
+
+`FDM_HOST`, `FDM_PORT`, and `FDM_TIMEOUT` are supported. Command-line options always take precedence.
+
 Human-readable output is the default. Use `--json` for scripts:
 
 ```powershell
@@ -38,7 +50,16 @@ fdm --json status | ConvertFrom-Json
 fdm --json --host printer.local status > status.json
 ```
 
-Run `fdm --help` or `fdm status --help` for built-in guidance. The older `--compact` flag remains accepted as an alias for `--json`.
+Run `fdm --help` or `fdm status --help` for built-in guidance. `info` is an alias for `attributes`, and `ls`/`list` are aliases for `files`. The older `--compact` flag remains accepted as an alias for `--json`.
+
+To open the printer's built-in web interface:
+
+```powershell
+fdm web
+fdm web --open
+```
+
+The commands that change print state (`start`, `pause`, `resume`, and `stop`) should be used intentionally. The printer may reject `start` unless a file has already been selected in its web interface.
 
 This tool controls printers on your local network. Do not expose the printer websocket port to the public internet.
 
