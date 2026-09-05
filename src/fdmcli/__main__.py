@@ -63,18 +63,22 @@ def _color_enabled(force_no_color: bool = False) -> bool:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="fdm",
-        description="Manage Elegoo network 3D printers over the local network.",
-        epilog=(
+    parser_options = {
+        "prog": "fdm",
+        "description": "Manage Elegoo network 3D printers over the local network.",
+        "epilog": (
             "Examples:\n"
             "  fdm status\n"
             "  fdm --host printer.local status\n"
             "  fdm --json status | ConvertFrom-Json\n"
             "  fdm web --open"
         ),
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
+        "formatter_class": argparse.RawDescriptionHelpFormatter,
+    }
+    try:
+        parser = argparse.ArgumentParser(**parser_options, suggest_on_error=True)
+    except TypeError:
+        parser = argparse.ArgumentParser(**parser_options)
     connection = parser.add_argument_group("connection")
     connection.add_argument(
         "--host",

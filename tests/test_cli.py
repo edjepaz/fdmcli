@@ -46,3 +46,10 @@ def test_parser_supports_release_commands():
 
 def test_style_is_plain_when_disabled():
     assert Style(False).good("ok") == "ok"
+
+
+def test_file_listing_aliases_are_available():
+    parser = build_parser()
+    assert parser.parse_args(["files"]).command == "files"
+    assert parser.parse_args(["list"]).command == "list"
+    assert parser.parse_args(["ls"]).command == "ls"

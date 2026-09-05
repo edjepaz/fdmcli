@@ -87,6 +87,8 @@ fdm --no-color status
 
 Run `fdm --help` or `fdm status --help` for built-in guidance. `info` is an alias for `attributes`, and `ls`/`list` are aliases for `files`. The older `--compact` flag remains accepted as an alias for `--json`.
 
+If you mistype a command, the CLI suggests the closest valid command. For example, use `fdm ls` or `fdm list` to list printer files.
+
 To open the printer's built-in web interface:
 
 ```powershell
