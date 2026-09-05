@@ -72,6 +72,16 @@ fdm status
 
 `FDM_HOST`, `FDM_PORT`, and `FDM_TIMEOUT` are supported. Command-line options always take precedence.
 
+File listings support case-insensitive search and pagination:
+
+```powershell
+fdm list --search benchy
+fdm list --search "rapid petg" --page 2 --per-page 10
+fdm ls --page 3 --page-size 25
+```
+
+The default page size is 20. Use `--json` to receive a paginated object containing `Files`, `Page`, `PerPage`, `Total`, `TotalPages`, and `Search`.
+
 Human-readable output is the default. Use `--json` for scripts:
 
 ```powershell

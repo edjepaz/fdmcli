@@ -29,6 +29,7 @@ COMMAND_HELP = {
     "versions": "List published versions",
     "upgrade": "Install the latest or a specific published version",
 }
+DEFAULT_PAGE_SIZE = 20
 
 
 class Style:
@@ -126,6 +127,16 @@ def build_parser() -> argparse.ArgumentParser:
         )
         if name == "files":
             command.add_argument("--path", default="/local", help="Printer storage path")
+            command.add_argument("--search", "-s", help="Filter filenames by this text (case-insensitive)")
+            command.add_argument("--page", type=int, default=1, help="Page number (default: 1)")
+            command.add_argument(
+                "--per-page",
+                "--page-size",
+                dest="per_page",
+                type=int,
+                default=DEFAULT_PAGE_SIZE,
+                help=f"Files per page (default: {DEFAULT_PAGE_SIZE})",
+            )
     web = subparsers.add_parser(
         "web",
         help=COMMAND_HELP["web"],
@@ -173,7 +184,29 @@ def _value(data: dict[str, Any], *keys: str, default: Any = None) -> Any:
     return default
 
 
-def _print_human(command: str, response: dict[str, Any], style: Style) -> None:
+def _file_page(response: dict[str, Any], search: str | None, page: int, per_page: int) -> dict[str, Any]:
+    payload = response.get("Data", {}).get("Data", response.get("Data", {}))
+    all_files = payload.get("FileList", [])
+    if search:
+        needle = search.casefold()
+        all_files = [
+            item for item in all_files
+            if needle in str(item.get("name") or item.get("Name") or item).casefold()
+        ]
+    total = len(all_files)
+    total_pages = max(1, (total + per_page - 1) // per_page)
+    start = (page - 1) * per_page
+    return {
+        "Files": all_files[start:start + per_page],
+        "Page": page,
+        "PerPage": per_page,
+        "Total": total,
+        "TotalPages": total_pages,
+        "Search": search or "",
+    }
+
+
+def _print_human(command: str, response: dict[str, Any], style: Style, file_page: dict[str, Any] | None = None) -> None:
     if command == "status":
         status = response.get("Status", {})
         current = _value(status, "CurrentStatus", default="unknown")
@@ -222,14 +255,23 @@ def _print_human(command: str, response: dict[str, Any], style: Style) -> None:
             print(f"  {style.label(f'{label:<26}')} {value}")
         return
     if command == "files":
-        payload = response.get("Data", {}).get("Data", response.get("Data", {}))
-        files = payload.get("FileList", [])
+        file_page = file_page or _file_page(response, None, 1, DEFAULT_PAGE_SIZE)
+        files = file_page["Files"]
         if files:
-            print(style.title(f"  FILES ({len(files)})"))
-            for index, item in enumerate(files, 1):
+            search_label = f" matching {file_page['Search']!r}" if file_page["Search"] else ""
+            print(style.title(f"  FILES ({file_page['Total']}{search_label})"))
+            first = (file_page["Page"] - 1) * file_page["PerPage"]
+            for index, item in enumerate(files, first + 1):
                 print(f"  {index:>3}  {item.get('name') or item.get('Name') or item}")
+            print(
+                style.label(
+                    f"  Page {file_page['Page']} of {file_page['TotalPages']} "
+                    f"({len(files)} shown)"
+                )
+            )
         else:
-            print(style.warn("  No files reported by the printer."))
+            message = f"No files match {file_page['Search']!r}." if file_page["Search"] else "No files reported by the printer."
+            print(style.warn(f"  {message}"))
         return
     ack = response.get("Data", {}).get("Ack")
     if ack in (None, 0):
@@ -280,6 +322,13 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(url)
         return 0
+    if args.command in {"files", "list", "ls"}:
+        if args.page < 1:
+            print("fdm: error: --page must be at least 1", file=sys.stderr)
+            return 2
+        if args.per_page < 1:
+            print("fdm: error: --per-page must be at least 1", file=sys.stderr)
+            return 2
     if args.command in {"upload", "print"}:
         if not args.file.lower().endswith(".gcode"):
             print("fdm: error: only .gcode files can be uploaded", file=sys.stderr)
@@ -339,9 +388,13 @@ def main(argv: list[str] | None = None) -> int:
         print("Tip: check the printer IP, that it is powered on, and that your computer is on the same network.", file=sys.stderr)
         return 1
     if args.json:
-        print(json.dumps(response, indent=2))
+        if command == "files":
+            print(json.dumps(_file_page(response, args.search, args.page, args.per_page), indent=2))
+        else:
+            print(json.dumps(response, indent=2))
     else:
-        _print_human(command, response, style)
+        file_page = _file_page(response, args.search, args.page, args.per_page) if command == "files" else None
+        _print_human(command, response, style, file_page)
     return 0
 
 

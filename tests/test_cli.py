@@ -1,5 +1,5 @@
 from fdmcli.__main__ import build_parser
-from fdmcli.__main__ import HelpFormatter, Style
+from fdmcli.__main__ import HelpFormatter, Style, _file_page
 from fdmcli.client import COMMANDS
 
 
@@ -62,3 +62,16 @@ def test_help_uses_organized_formatter():
     assert "connection:" in help_text
     assert "output:" in help_text
     assert isinstance(parser._get_formatter(), HelpFormatter)
+
+
+def test_file_search_and_pagination():
+    args = build_parser().parse_args(["list", "--search", "benchy", "--page", "2", "--per-page", "5"])
+    assert args.search == "benchy"
+    assert args.page == 2
+    assert args.per_page == 5
+
+    response = {"Data": {"Data": {"FileList": [{"name": f"benchy-{i}.gcode"} for i in range(7)]}}}
+    result = _file_page(response, "BENCHY", 2, 5)
+    assert result["Total"] == 7
+    assert result["TotalPages"] == 2
+    assert result["Files"] == [{"name": "benchy-5.gcode"}, {"name": "benchy-6.gcode"}]
