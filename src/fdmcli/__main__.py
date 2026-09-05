@@ -11,6 +11,7 @@ from typing import Any
 
 from . import __version__
 from .client import COMMANDS, PrinterClient, PrinterError
+from .updates import UpdateError, install_release, latest_release, releases
 
 
 COMMAND_HELP = {
@@ -24,6 +25,9 @@ COMMAND_HELP = {
     "web": "Show or open the printer web interface",
     "upload": "Upload a .gcode file without starting it",
     "print": "Upload a .gcode file and start printing it",
+    "version": "Show the installed version and check for updates",
+    "versions": "List published versions",
+    "upgrade": "Install the latest or a specific published version",
 }
 
 
@@ -61,7 +65,7 @@ def build_parser() -> argparse.ArgumentParser:
     output = parser.add_argument_group("output")
     output.add_argument("--json", action="store_true", help="Print machine-readable JSON")
     output.add_argument("--compact", dest="json", action="store_true", help=argparse.SUPPRESS)
-    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
+    parser.add_argument("--version", dest="show_version", action="store_true", help="Show the installed version and check for updates")
     subparsers = parser.add_subparsers(dest="command", required=True)
     for name in COMMANDS:
         aliases = {"attributes": ["info"], "files": ["list", "ls"]}.get(name, [])
@@ -80,6 +84,11 @@ def build_parser() -> argparse.ArgumentParser:
         command.add_argument("file", help="Path to a .gcode file")
         if name == "print":
             command.add_argument("--yes", action="store_true", help="Skip the print confirmation prompt")
+    subparsers.add_parser("version", help=COMMAND_HELP["version"], description=COMMAND_HELP["version"])
+    versions_command = subparsers.add_parser("versions", help=COMMAND_HELP["versions"], description=COMMAND_HELP["versions"])
+    versions_command.add_argument("--json", action="store_true", help="Print machine-readable JSON")
+    upgrade = subparsers.add_parser("upgrade", help=COMMAND_HELP["upgrade"], description=COMMAND_HELP["upgrade"])
+    upgrade.add_argument("version", nargs="?", help="Release tag, such as v0.4.0; defaults to latest")
     return parser
 
 
@@ -129,7 +138,36 @@ def _print_human(command: str, response: dict[str, Any]) -> None:
 def main(argv: list[str] | None = None) -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(errors="replace")
+    raw_args = list(sys.argv[1:] if argv is None else argv)
+    if "--version" in raw_args and not any(item in COMMAND_HELP for item in raw_args):
+        _show_version()
+        return 0
     args = build_parser().parse_args(argv)
+    if args.show_version:
+        _show_version()
+        return 0
+    if args.command in {"version", "versions", "upgrade"}:
+        try:
+            if args.command == "upgrade":
+                target = args.version or (latest_release().tag if latest_release() else None)
+                if not target:
+                    raise UpdateError("no published releases found")
+                print(install_release(target))
+                return 0
+            available = releases()
+            if args.command == "versions":
+                if args.json:
+                    print(json.dumps([{"tag": item.tag, "url": item.url} for item in available], indent=2))
+                else:
+                    for item in available:
+                        marker = " (installed)" if item.tag.lstrip("v") == __version__ else ""
+                        print(f"{item.tag}{marker}  {item.url}")
+                return 0
+            _show_version(available)
+            return 0
+        except UpdateError as exc:
+            print(f"fdm: update check failed: {exc}", file=sys.stderr)
+            return 1
     if args.command == "web":
         url = f"http://{args.host}/"
         if args.open:
@@ -201,6 +239,20 @@ def main(argv: list[str] | None = None) -> int:
     else:
         _print_human(command, response)
     return 0
+
+
+def _show_version(available: list[Any] | None = None) -> None:
+    print(f"fdm {__version__}")
+    try:
+        release = max(available or releases(), key=lambda item: tuple(int(part) for part in item.tag.lstrip("v").split(".") if part.isdigit()))
+        installed = tuple(int(part) for part in __version__.split("."))
+        latest = tuple(int(part) for part in release.tag.lstrip("v").split(".") if part.isdigit())
+        if latest > installed:
+            print(f"Update available: {release.tag} (run: fdm upgrade)")
+        else:
+            print("Up to date.")
+    except UpdateError:
+        print("Update check unavailable.")
 
 
 if __name__ == "__main__":

@@ -4,6 +4,19 @@
 
 ## Install
 
+### Windows executable
+
+Download `fdm-windows-x64.exe` from the latest [GitHub release](https://github.com/edjepaz/fdmcli/releases/latest), rename it to `fdm.exe`, and put it on your `PATH`. No Python installation is required.
+
+The executable can update itself:
+
+```powershell
+fdm upgrade
+fdm upgrade v0.4.0
+```
+
+### Python
+
 ```powershell
 py -m pip install git+https://github.com/edjepaz/fdmcli.git
 ```
@@ -26,6 +39,22 @@ fdm resume
 fdm stop
 fdm web --open
 ```
+
+Check the installed version and automatically check GitHub for a newer release:
+
+```powershell
+fdm --version
+fdm version
+```
+
+List all stable published versions:
+
+```powershell
+fdm versions
+fdm versions --json
+```
+
+`fdm upgrade` installs the latest stable release. Pass a tag to upgrade or downgrade to an exact version. The executable updates itself; Python installations use pip.
 
 The default host is `192.168.1.249`, so the shortest command is `fdm status`. Override it with `--host` when using another printer:
 

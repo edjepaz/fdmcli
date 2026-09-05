@@ -34,3 +34,10 @@ def test_parser_supports_upload_and_print_commands():
     assert build_parser().parse_args(["upload", "model.gcode"]).file == "model.gcode"
     args = build_parser().parse_args(["print", "model.gcode", "--yes"])
     assert args.yes
+
+
+def test_parser_supports_release_commands():
+    assert build_parser().parse_args(["version"]).command == "version"
+    assert build_parser().parse_args(["versions"]).command == "versions"
+    args = build_parser().parse_args(["upgrade", "v0.4.0"])
+    assert args.version == "v0.4.0"
