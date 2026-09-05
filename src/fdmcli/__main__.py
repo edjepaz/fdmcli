@@ -22,6 +22,8 @@ COMMAND_HELP = {
     "stop": "Stop the current print",
     "resume": "Resume the current print",
     "web": "Show or open the printer web interface",
+    "upload": "Upload a .gcode file without starting it",
+    "print": "Upload a .gcode file and start printing it",
 }
 
 
@@ -73,6 +75,11 @@ def build_parser() -> argparse.ArgumentParser:
             command.add_argument("--path", default="/local", help="Printer storage path")
     web = subparsers.add_parser("web", help=COMMAND_HELP["web"], description=COMMAND_HELP["web"])
     web.add_argument("--open", action="store_true", help="Open the printer web interface in your browser")
+    for name in ("upload", "print"):
+        command = subparsers.add_parser(name, help=COMMAND_HELP[name], description=COMMAND_HELP[name])
+        command.add_argument("file", help="Path to a .gcode file")
+        if name == "print":
+            command.add_argument("--yes", action="store_true", help="Skip the print confirmation prompt")
     return parser
 
 
@@ -131,6 +138,56 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(url)
         return 0
+    if args.command in {"upload", "print"}:
+        if not args.file.lower().endswith(".gcode"):
+            print("fdm: error: only .gcode files can be uploaded", file=sys.stderr)
+            return 1
+        if not os.path.isfile(args.file):
+            print(f"fdm: error: file not found: {args.file}", file=sys.stderr)
+            return 1
+        if args.command == "print" and not args.yes:
+            answer = input(f"Start printing {args.file}? [y/N] ").strip().lower()
+            if answer not in {"y", "yes"}:
+                print("Print cancelled.")
+                return 0
+        client = PrinterClient(args.host, args.port, args.timeout)
+        try:
+            print(f"Uploading {args.file}...")
+            client.upload(args.file, lambda progress: print(f"\rUpload: {progress:.0%}", end="", flush=True))
+            print()
+            if args.command == "upload":
+                print("Upload complete.")
+                return 0
+            files = client.command("files", {"Url": "/local"})
+            payload = files.get("Data", {}).get("Data", files.get("Data", {}))
+            remote_name = next(
+                (item.get("name") for item in payload.get("FileList", []) if item.get("name", "").endswith(os.path.basename(args.file))),
+                f"/local/{os.path.basename(args.file)}",
+            )
+            status = client.command("status")
+            status_data = status.get("Status", {})
+            response = client.command(
+                "start",
+                {
+                    "Filename": remote_name,
+                    "StartLayer": 0,
+                    "Calibration_switch": 0,
+                    "PrintPlatformType": status_data.get("PlatFormType", 0),
+                    "Tlp_Switch": 0,
+                    "slot_map": [],
+                },
+            )
+            ack = response.get("Data", {}).get("Ack")
+            if ack not in (None, 0):
+                raise PrinterError(f"printer rejected the start command (acknowledgment {ack})")
+            if args.json:
+                print(json.dumps(response, indent=2))
+            else:
+                print(f"Print started: {remote_name}")
+            return 0
+        except (PrinterError, ValueError) as exc:
+            print(f"fdm: error: {exc}", file=sys.stderr)
+            return 1
     command = {"info": "attributes", "list": "files", "ls": "files"}.get(args.command, args.command)
     data: dict[str, Any] = {"Url": args.path} if command == "files" else {}
     try:

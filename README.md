@@ -61,6 +61,28 @@ fdm web --open
 
 The commands that change print state (`start`, `pause`, `resume`, and `stop`) should be used intentionally. The printer may reject `start` unless a file has already been selected in its web interface.
 
+## Printing from the CLI
+
+Upload a sliced G-code file without starting it:
+
+```powershell
+fdm upload .\model.gcode
+```
+
+Upload a file and start printing it. `fdm` asks for confirmation because this starts a real print:
+
+```powershell
+fdm print .\model.gcode
+```
+
+For scripts or unattended use:
+
+```powershell
+fdm print .\model.gcode --yes
+```
+
+The file must be a `.gcode` file. The CLI uploads it in 1 MiB chunks, refreshes the printer file list, and starts the uploaded file using the printer's local SDCP protocol. It does not slice STL/3MF files; slice them first in your usual slicer.
+
 This tool controls printers on your local network. Do not expose the printer websocket port to the public internet.
 
 ## Protocol support

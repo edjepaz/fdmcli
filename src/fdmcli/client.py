@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 import json
+import hashlib
+import mimetypes
+import os
 import time
+import urllib.error
+import urllib.request
 import uuid
 from typing import Any
 
@@ -19,6 +24,7 @@ COMMANDS = {
     "resume": 131,
     "files": 258,
 }
+UPLOAD_CHUNK_SIZE = 1024 * 1024
 
 
 class PrinterError(RuntimeError):
@@ -93,3 +99,78 @@ class PrinterClient:
         finally:
             if ws is not None:
                 ws.close()
+
+    def upload(self, path: str, on_progress: Any = None) -> dict[str, Any]:
+        """Upload a G-code file using the printer's chunked HTTP endpoint."""
+        if not path.lower().endswith(".gcode"):
+            raise PrinterError("Only .gcode files can be uploaded")
+        if not os.path.isfile(path):
+            raise PrinterError(f"File not found: {path}")
+
+        size = os.path.getsize(path)
+        digest = hashlib.md5()
+        with open(path, "rb") as source:
+            while chunk := source.read(UPLOAD_CHUNK_SIZE):
+                digest.update(chunk)
+        upload_id = uuid.uuid4().hex
+        name = os.path.basename(path)
+        last_response: dict[str, Any] = {}
+        with open(path, "rb") as source:
+            offset = 0
+            while offset < size:
+                chunk = source.read(UPLOAD_CHUNK_SIZE)
+                body, content_type = _multipart(
+                    {
+                        "TotalSize": str(size),
+                        "Uuid": upload_id,
+                        "Offset": str(offset),
+                        "Check": "1",
+                        "S-File-MD5": digest.hexdigest(),
+                    },
+                    "File",
+                    name,
+                    chunk,
+                )
+                request = urllib.request.Request(
+                    f"http://{self.url.split('//', 1)[1].split(':', 1)[0]}:80/uploadFile/upload",
+                    data=body,
+                    headers={"Content-Type": content_type},
+                    method="POST",
+                )
+                try:
+                    with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                        raw = response.read()
+                        last_response = json.loads(raw.decode("utf-8", errors="replace") or "{}")
+                except (OSError, urllib.error.URLError, json.JSONDecodeError) as exc:
+                    raise PrinterError(f"Upload failed for {name}: {exc}") from exc
+                offset += len(chunk)
+                if on_progress:
+                    on_progress(offset / size)
+        return last_response
+
+
+def _multipart(fields: dict[str, str], field_name: str, filename: str, content: bytes) -> tuple[bytes, str]:
+    boundary = f"----fdmcli{uuid.uuid4().hex}"
+    lines: list[bytes] = []
+    for key, value in fields.items():
+        lines.extend(
+            [
+                f"--{boundary}".encode(),
+                f'Content-Disposition: form-data; name="{key}"'.encode(),
+                b"",
+                value.encode(),
+            ]
+        )
+    content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+    lines.extend(
+        [
+            f"--{boundary}".encode(),
+            f'Content-Disposition: form-data; name="{field_name}"; filename="{filename}"'.encode(),
+            f"Content-Type: {content_type}".encode(),
+            b"",
+            content,
+            f"--{boundary}--".encode(),
+            b"",
+        ]
+    )
+    return b"\r\n".join(lines), f"multipart/form-data; boundary={boundary}"

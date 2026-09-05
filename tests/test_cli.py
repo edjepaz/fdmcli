@@ -28,3 +28,9 @@ def test_parser_supports_helpful_aliases():
 def test_parser_supports_web_command():
     args = build_parser().parse_args(["web", "--open"])
     assert args.open
+
+
+def test_parser_supports_upload_and_print_commands():
+    assert build_parser().parse_args(["upload", "model.gcode"]).file == "model.gcode"
+    args = build_parser().parse_args(["print", "model.gcode", "--yes"])
+    assert args.yes
