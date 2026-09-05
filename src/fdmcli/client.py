@@ -53,16 +53,22 @@ class PrinterClient:
             }
             ws.send(json.dumps(message))
             deadline = time.monotonic() + self.timeout
+            fallback: dict[str, Any] | None = None
             while time.monotonic() < deadline:
                 response = json.loads(ws.recv())
                 topic = response.get("Topic", "")
-                if (
-                    request_id == response.get("Data", {}).get("RequestID")
-                    or "response" in topic
-                    or "status" in topic
-                    or "attributes" in topic
-                ):
+                if request_id == response.get("Data", {}).get("RequestID"):
+                    fallback = response
+                if name == "status" and "status" in topic:
                     return response
+                if name == "attributes" and "attributes" in topic:
+                    return response
+                if name == "files" and "response" not in topic:
+                    return response
+                if name not in {"status", "attributes", "files"} and "response" in topic:
+                    return response
+            if fallback is not None:
+                return fallback
             raise PrinterError("Timed out waiting for a printer response")
         except (OSError, websocket.WebSocketException, json.JSONDecodeError) as exc:
             raise PrinterError(f"Unable to communicate with printer: {exc}") from exc

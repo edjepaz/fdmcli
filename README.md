@@ -1,11 +1,11 @@
 # fdmcli
 
-`fdmcli` is a small command-line client for Elegoo network 3D printers that expose the local SDCP websocket protocol. It has been tested with the Elegoo Centauri Carbon.
+`fdmcli` is a friendly command-line client for Elegoo network 3D printers that expose the local SDCP websocket protocol. It has been tested with the Elegoo Centauri Carbon.
 
 ## Install
 
 ```powershell
-py -m pip install fdmcli
+py -m pip install git+https://github.com/edjepaz/fdmcli.git
 ```
 
 For development:
@@ -17,19 +17,28 @@ py -m pip install -e ".[test]"
 ## Usage
 
 ```powershell
-fdm --host 192.168.1.249 status
-fdm --host 192.168.1.249 attributes
-fdm --host 192.168.1.249 files
-fdm --host 192.168.1.249 pause
-fdm --host 192.168.1.249 resume
-fdm --host 192.168.1.249 stop
+fdm status
+fdm attributes
+fdm files
+fdm pause
+fdm resume
+fdm stop
 ```
 
-The default host is `192.168.1.249`; override it with `--host`. Responses are printed as JSON, making the tool suitable for scripts:
+The default host is `192.168.1.249`, so the shortest command is `fdm status`. Override it with `--host` when using another printer:
 
 ```powershell
-fdm --host printer.local --compact status | ConvertFrom-Json
+fdm --host printer.local status
 ```
+
+Human-readable output is the default. Use `--json` for scripts:
+
+```powershell
+fdm --json status | ConvertFrom-Json
+fdm --json --host printer.local status > status.json
+```
+
+Run `fdm --help` or `fdm status --help` for built-in guidance. The older `--compact` flag remains accepted as an alias for `--json`.
 
 This tool controls printers on your local network. Do not expose the printer websocket port to the public internet.
 
