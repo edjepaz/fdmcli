@@ -72,6 +72,36 @@ fdm status
 
 `FDM_HOST`, `FDM_PORT`, and `FDM_TIMEOUT` are supported. Command-line options always take precedence.
 
+## Multiple printers
+
+Save named printer profiles in `%APPDATA%\fdmcli\config.json`:
+
+```powershell
+fdm printer add home --host 192.168.1.249
+fdm printer add garage --host 192.168.1.250 --port 3030
+fdm printer list
+fdm printer use home
+```
+
+Target a saved printer for any operation:
+
+```powershell
+fdm --printer garage status
+fdm --printer garage list --search benchy
+fdm --printer home web --open
+```
+
+Edit or remove profiles directly from the CLI:
+
+```powershell
+fdm printer edit garage --host 192.168.1.251
+fdm printer edit garage --timeout 15
+fdm printer remove garage
+fdm printer remove garage --yes
+```
+
+The target priority is: explicit `--host`, selected `--printer` profile, saved default profile, `FDM_HOST`, then `192.168.1.249`. `--port` and `--timeout` follow the same override behavior. Commands operate on one selected printer at a time.
+
 File listings support case-insensitive search and pagination:
 
 ```powershell

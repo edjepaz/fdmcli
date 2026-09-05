@@ -11,6 +11,7 @@ from typing import Any
 
 from . import __version__
 from .client import COMMANDS, PrinterClient, PrinterError
+from .config import PrinterProfile, config_path, default_name, get_profile, profiles, remove_profile, save_profile, set_default
 from .updates import UpdateError, install_release, latest_release, releases
 
 
@@ -28,6 +29,7 @@ COMMAND_HELP = {
     "version": "Show the installed version and check for updates",
     "versions": "List published versions",
     "upgrade": "Install the latest or a specific published version",
+    "printer": "Add, edit, remove, select, and list printer profiles",
 }
 DEFAULT_PAGE_SIZE = 20
 
@@ -90,21 +92,22 @@ def build_parser() -> argparse.ArgumentParser:
     connection = parser.add_argument_group("connection")
     connection.add_argument(
         "--host",
-        default=os.getenv("FDM_HOST", "192.168.1.249"),
-        help="Printer IP or hostname (env: FDM_HOST)",
+        default=None,
+        help="Printer IP or hostname; overrides --printer and profile settings",
     )
     connection.add_argument(
         "--port",
         type=int,
-        default=int(os.getenv("FDM_PORT", "3030")),
-        help="Printer websocket port (env: FDM_PORT)",
+        default=None,
+        help="Printer websocket port; overrides profile settings",
     )
     connection.add_argument(
         "--timeout",
         type=float,
-        default=float(os.getenv("FDM_TIMEOUT", "10")),
-        help="Response timeout in seconds (env: FDM_TIMEOUT)",
+        default=None,
+        help="Response timeout; overrides profile settings",
     )
+    connection.add_argument("--printer", help="Named printer profile to use")
     output = parser.add_argument_group("output")
     output.add_argument("--json", action="store_true", help="Print machine-readable JSON")
     output.add_argument("--compact", dest="json", action="store_true", help=argparse.SUPPRESS)
@@ -174,6 +177,30 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=HelpFormatter,
     )
     upgrade.add_argument("version", nargs="?", help="Release tag, such as v0.4.0; defaults to latest")
+    printer = subparsers.add_parser(
+        "printer",
+        aliases=["printers"],
+        help=COMMAND_HELP["printer"],
+        description=COMMAND_HELP["printer"],
+        formatter_class=HelpFormatter,
+    )
+    printer_subparsers = printer.add_subparsers(dest="printer_command", required=True, metavar="ACTION")
+    printer_subparsers.add_parser("list", help="List saved printer profiles", formatter_class=HelpFormatter)
+    add = printer_subparsers.add_parser("add", help="Add a named printer profile", formatter_class=HelpFormatter)
+    add.add_argument("name")
+    add.add_argument("--host", required=True)
+    add.add_argument("--port", type=int, default=3030)
+    add.add_argument("--timeout", type=float, default=10)
+    edit = printer_subparsers.add_parser("edit", help="Edit a saved printer profile", formatter_class=HelpFormatter)
+    edit.add_argument("name")
+    edit.add_argument("--host")
+    edit.add_argument("--port", type=int)
+    edit.add_argument("--timeout", type=float)
+    remove = printer_subparsers.add_parser("remove", help="Remove a saved printer profile", formatter_class=HelpFormatter)
+    remove.add_argument("name")
+    remove.add_argument("--yes", action="store_true")
+    use = printer_subparsers.add_parser("use", help="Set the default printer profile", formatter_class=HelpFormatter)
+    use.add_argument("name")
     return parser
 
 
@@ -182,6 +209,66 @@ def _value(data: dict[str, Any], *keys: str, default: Any = None) -> Any:
         if key in data:
             return data[key]
     return default
+
+
+def _connection(args: argparse.Namespace) -> tuple[str, int, float, str | None]:
+    selected = get_profile(args.printer) if args.printer else (get_profile(default_name()) if default_name() else None)
+    host = args.host or (selected.host if selected else os.getenv("FDM_HOST", "192.168.1.249"))
+    port = args.port or (selected.port if selected else int(os.getenv("FDM_PORT", "3030")))
+    timeout = args.timeout or (selected.timeout if selected else float(os.getenv("FDM_TIMEOUT", "10")))
+    return host, port, timeout, selected.name if selected else None
+
+
+def _print_profiles(style: Style, as_json: bool) -> None:
+    saved = profiles()
+    default = default_name()
+    if as_json:
+        print(json.dumps({
+            "config": str(config_path()),
+            "default": default,
+            "printers": [{"name": item.name, **item.as_dict()} for item in saved],
+        }, indent=2))
+        return
+    print(style.title("  PRINTER PROFILES"))
+    print(style.label(f"  Config: {config_path()}"))
+    if not saved:
+        print(style.warn("  No saved printer profiles."))
+        return
+    for item in saved:
+        marker = style.good("*") if item.name == default else " "
+        print(f"  {marker} {item.name:<18} {item.host}:{item.port}  timeout={item.timeout:g}s")
+
+
+def _handle_printer_command(args: argparse.Namespace, style: Style) -> int:
+    action = args.printer_command
+    try:
+        if action == "list":
+            _print_profiles(style, args.json)
+        elif action == "add":
+            save_profile(PrinterProfile(args.name, args.host, args.port, args.timeout))
+            print(style.good(f"  Added printer profile '{args.name}'."))
+        elif action == "edit":
+            current = get_profile(args.name)
+            save_profile(PrinterProfile(
+                args.name,
+                args.host or current.host,
+                args.port or current.port,
+                args.timeout or current.timeout,
+            ))
+            print(style.good(f"  Updated printer profile '{args.name}'."))
+        elif action == "remove":
+            if not args.yes and input(f"Remove printer profile '{args.name}'? [y/N] ").strip().lower() not in {"y", "yes"}:
+                print(style.warn("  Removal cancelled."))
+                return 0
+            remove_profile(args.name)
+            print(style.good(f"  Removed printer profile '{args.name}'."))
+        elif action == "use":
+            set_default(args.name)
+            print(style.good(f"  Default printer is now '{args.name}'."))
+        return 0
+    except (RuntimeError, OSError) as exc:
+        print(f"fdm: error: {exc}", file=sys.stderr)
+        return 1
 
 
 def _file_page(response: dict[str, Any], search: str | None, page: int, per_page: int) -> dict[str, Any]:
@@ -289,6 +376,13 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     args = build_parser().parse_args(argv)
     style = Style(_color_enabled(args.no_color))
+    if args.command in {"printer", "printers"}:
+        return _handle_printer_command(args, style)
+    try:
+        host, port, timeout, selected_profile = _connection(args)
+    except RuntimeError as exc:
+        print(f"fdm: error: {exc}", file=sys.stderr)
+        return 1
     if args.show_version:
         _show_version()
         return 0
@@ -315,7 +409,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"fdm: update check failed: {exc}", file=sys.stderr)
             return 1
     if args.command == "web":
-        url = f"http://{args.host}/"
+        url = f"http://{host}/"
         if args.open:
             webbrowser.open(url)
             print(style.good(f"Opened {url}"))
@@ -341,7 +435,7 @@ def main(argv: list[str] | None = None) -> int:
             if answer not in {"y", "yes"}:
                 print(style.warn("Print cancelled."))
                 return 0
-        client = PrinterClient(args.host, args.port, args.timeout)
+        client = PrinterClient(host, port, timeout)
         try:
             print(style.title("Uploading") + f" {args.file}")
             client.upload(args.file, lambda progress: print(f"\r  [{('#' * round(progress * 20)).ljust(20, '-')}] {progress:.0%}", end="", flush=True))
@@ -382,7 +476,7 @@ def main(argv: list[str] | None = None) -> int:
     command = {"info": "attributes", "list": "files", "ls": "files"}.get(args.command, args.command)
     data: dict[str, Any] = {"Url": args.path} if command == "files" else {}
     try:
-        response = PrinterClient(args.host, args.port, args.timeout).command(command, data)
+        response = PrinterClient(host, port, timeout).command(command, data)
     except (PrinterError, ValueError) as exc:
         print(f"fdm: error: {exc}", file=sys.stderr)
         print("Tip: check the printer IP, that it is powered on, and that your computer is on the same network.", file=sys.stderr)

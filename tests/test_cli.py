@@ -1,6 +1,7 @@
 from fdmcli.__main__ import build_parser
 from fdmcli.__main__ import HelpFormatter, Style, _file_page
 from fdmcli.client import COMMANDS
+from fdmcli.config import PrinterProfile, get_profile, profiles, save_profile, set_default
 
 
 def test_commands_have_expected_protocol_values():
@@ -11,8 +12,10 @@ def test_commands_have_expected_protocol_values():
 
 def test_parser_defaults_to_local_printer():
     args = build_parser().parse_args(["status"])
-    assert args.host == "192.168.1.249"
-    assert args.port == 3030
+    assert args.host is None
+    assert args.printer is None
+    assert args.port is None
+    assert args.timeout is None
     assert not args.json
 
 
@@ -75,3 +78,20 @@ def test_file_search_and_pagination():
     assert result["Total"] == 7
     assert result["TotalPages"] == 2
     assert result["Files"] == [{"name": "benchy-5.gcode"}, {"name": "benchy-6.gcode"}]
+
+
+def test_printer_profile_commands_parse():
+    parser = build_parser()
+    args = parser.parse_args(["printer", "add", "garage", "--host", "192.168.1.250"])
+    assert args.printer_command == "add"
+    assert args.name == "garage"
+    assert args.host == "192.168.1.250"
+
+
+def test_printer_profiles_persist(monkeypatch, tmp_path):
+    monkeypatch.setenv("FDM_CONFIG", str(tmp_path / "config.json"))
+    save_profile(PrinterProfile("home", "192.168.1.249"))
+    save_profile(PrinterProfile("garage", "192.168.1.250", 3031))
+    set_default("garage")
+    assert [item.name for item in profiles()] == ["garage", "home"]
+    assert get_profile("garage").port == 3031
