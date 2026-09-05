@@ -1,4 +1,4 @@
-from fdmcli.__main__ import build_parser
+from fdmcli.__main__ import _connection, build_parser
 from fdmcli.__main__ import HelpFormatter, Style, _file_page
 from fdmcli.client import COMMANDS
 from fdmcli.config import PrinterProfile, get_profile, profiles, save_profile, set_default
@@ -95,3 +95,24 @@ def test_printer_profiles_persist(monkeypatch, tmp_path):
     set_default("garage")
     assert [item.name for item in profiles()] == ["garage", "home"]
     assert get_profile("garage").port == 3031
+
+
+def test_connection_requires_a_configured_printer(monkeypatch, tmp_path):
+    monkeypatch.setenv("FDM_CONFIG", str(tmp_path / "config.json"))
+    monkeypatch.delenv("FDM_HOST", raising=False)
+    args = build_parser().parse_args(["status"])
+    try:
+        _connection(args)
+    except RuntimeError as exc:
+        message = str(exc)
+    else:
+        raise AssertionError("expected missing printer configuration error")
+    assert "fdm printer add home --host PRINTER_IP" in message
+    assert "192.168.1.249" not in message
+
+
+def test_explicit_host_works_without_a_profile(monkeypatch, tmp_path):
+    monkeypatch.setenv("FDM_CONFIG", str(tmp_path / "config.json"))
+    monkeypatch.delenv("FDM_HOST", raising=False)
+    args = build_parser().parse_args(["--host", "192.168.1.249", "status"])
+    assert _connection(args)[:3] == ("192.168.1.249", 3030, 10)

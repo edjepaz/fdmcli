@@ -213,7 +213,13 @@ def _value(data: dict[str, Any], *keys: str, default: Any = None) -> Any:
 
 def _connection(args: argparse.Namespace) -> tuple[str, int, float, str | None]:
     selected = get_profile(args.printer) if args.printer else (get_profile(default_name()) if default_name() else None)
-    host = args.host or (selected.host if selected else os.getenv("FDM_HOST", "192.168.1.249"))
+    host = args.host or (selected.host if selected else os.getenv("FDM_HOST"))
+    if not host:
+        raise RuntimeError(
+            "No printer is configured.\n\n"
+            f"Add a printer with:\n  fdm printer add home --host PRINTER_IP\n\n"
+            f"Saved profiles are stored in: {config_path()}"
+        )
     port = args.port or (selected.port if selected else int(os.getenv("FDM_PORT", "3030")))
     timeout = args.timeout or (selected.timeout if selected else float(os.getenv("FDM_TIMEOUT", "10")))
     return host, port, timeout, selected.name if selected else None
@@ -378,11 +384,6 @@ def main(argv: list[str] | None = None) -> int:
     style = Style(_color_enabled(args.no_color))
     if args.command in {"printer", "printers"}:
         return _handle_printer_command(args, style)
-    try:
-        host, port, timeout, selected_profile = _connection(args)
-    except RuntimeError as exc:
-        print(f"fdm: error: {exc}", file=sys.stderr)
-        return 1
     if args.show_version:
         _show_version()
         return 0
@@ -408,6 +409,11 @@ def main(argv: list[str] | None = None) -> int:
         except UpdateError as exc:
             print(f"fdm: update check failed: {exc}", file=sys.stderr)
             return 1
+    try:
+        host, port, timeout, selected_profile = _connection(args)
+    except RuntimeError as exc:
+        print(f"fdm: error: {exc}", file=sys.stderr)
+        return 1
     if args.command == "web":
         url = f"http://{host}/"
         if args.open:

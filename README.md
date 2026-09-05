@@ -56,21 +56,21 @@ fdm versions --json
 
 `fdm upgrade` installs the latest stable release. Pass a tag to upgrade or downgrade to an exact version. The executable updates itself; Python installations use pip.
 
-The default host is `192.168.1.249`, so the shortest command is `fdm status`. Override it with `--host` when using another printer:
+Configure a printer profile before running printer commands:
+
+```powershell
+fdm printer add home --host 192.168.1.249
+fdm printer use home
+fdm status
+```
+
+For a one-time connection, use `--host`:
 
 ```powershell
 fdm --host printer.local status
 ```
 
-You can also set a default printer without repeating options:
-
-```powershell
-$env:FDM_HOST = "printer.local"
-$env:FDM_PORT = "3030"
-fdm status
-```
-
-`FDM_HOST`, `FDM_PORT`, and `FDM_TIMEOUT` are supported. Command-line options always take precedence.
+`FDM_HOST`, `FDM_PORT`, and `FDM_TIMEOUT` are also supported as environment overrides. Command-line options always take precedence. If no profile or `FDM_HOST` is available, `fdm` prints the setup command instead of using a built-in printer.
 
 ## Multiple printers
 
@@ -100,7 +100,7 @@ fdm printer remove garage
 fdm printer remove garage --yes
 ```
 
-The target priority is: explicit `--host`, selected `--printer` profile, saved default profile, `FDM_HOST`, then `192.168.1.249`. `--port` and `--timeout` follow the same override behavior. Commands operate on one selected printer at a time.
+The target priority is: explicit `--host`, selected `--printer` profile, saved default profile, then `FDM_HOST`. `--port` and `--timeout` follow the same override behavior. Commands operate on one selected printer at a time.
 
 File listings support case-insensitive search and pagination:
 
