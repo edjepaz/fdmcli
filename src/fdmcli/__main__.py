@@ -62,6 +62,13 @@ def _color_enabled(force_no_color: bool = False) -> bool:
     return not force_no_color and "NO_COLOR" not in os.environ and sys.stdout.isatty()
 
 
+class HelpFormatter(argparse.RawDescriptionHelpFormatter):
+    """Keep help columns readable in narrow and wide terminals."""
+
+    def __init__(self, prog: str) -> None:
+        super().__init__(prog, max_help_position=32, width=100)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser_options = {
         "prog": "fdm",
@@ -73,7 +80,7 @@ def build_parser() -> argparse.ArgumentParser:
             "  fdm --json status | ConvertFrom-Json\n"
             "  fdm web --open"
         ),
-        "formatter_class": argparse.RawDescriptionHelpFormatter,
+        "formatter_class": HelpFormatter,
     }
     try:
         parser = argparse.ArgumentParser(**parser_options, suggest_on_error=True)
@@ -102,7 +109,12 @@ def build_parser() -> argparse.ArgumentParser:
     output.add_argument("--compact", dest="json", action="store_true", help=argparse.SUPPRESS)
     output.add_argument("--no-color", action="store_true", help="Disable colored terminal output")
     parser.add_argument("--version", dest="show_version", action="store_true", help="Show the installed version and check for updates")
-    subparsers = parser.add_subparsers(dest="command", required=True)
+    subparsers = parser.add_subparsers(
+        dest="command",
+        required=True,
+        title="commands",
+        metavar="COMMAND",
+    )
     for name in COMMANDS:
         aliases = {"attributes": ["info"], "files": ["list", "ls"]}.get(name, [])
         command = subparsers.add_parser(
@@ -110,20 +122,46 @@ def build_parser() -> argparse.ArgumentParser:
             aliases=aliases,
             help=COMMAND_HELP[name],
             description=COMMAND_HELP[name],
+            formatter_class=HelpFormatter,
         )
         if name == "files":
             command.add_argument("--path", default="/local", help="Printer storage path")
-    web = subparsers.add_parser("web", help=COMMAND_HELP["web"], description=COMMAND_HELP["web"])
+    web = subparsers.add_parser(
+        "web",
+        help=COMMAND_HELP["web"],
+        description=COMMAND_HELP["web"],
+        formatter_class=HelpFormatter,
+    )
     web.add_argument("--open", action="store_true", help="Open the printer web interface in your browser")
     for name in ("upload", "print"):
-        command = subparsers.add_parser(name, help=COMMAND_HELP[name], description=COMMAND_HELP[name])
+        command = subparsers.add_parser(
+            name,
+            help=COMMAND_HELP[name],
+            description=COMMAND_HELP[name],
+            formatter_class=HelpFormatter,
+        )
         command.add_argument("file", help="Path to a .gcode file")
         if name == "print":
             command.add_argument("--yes", action="store_true", help="Skip the print confirmation prompt")
-    subparsers.add_parser("version", help=COMMAND_HELP["version"], description=COMMAND_HELP["version"])
-    versions_command = subparsers.add_parser("versions", help=COMMAND_HELP["versions"], description=COMMAND_HELP["versions"])
+    subparsers.add_parser(
+        "version",
+        help=COMMAND_HELP["version"],
+        description=COMMAND_HELP["version"],
+        formatter_class=HelpFormatter,
+    )
+    versions_command = subparsers.add_parser(
+        "versions",
+        help=COMMAND_HELP["versions"],
+        description=COMMAND_HELP["versions"],
+        formatter_class=HelpFormatter,
+    )
     versions_command.add_argument("--json", action="store_true", help="Print machine-readable JSON")
-    upgrade = subparsers.add_parser("upgrade", help=COMMAND_HELP["upgrade"], description=COMMAND_HELP["upgrade"])
+    upgrade = subparsers.add_parser(
+        "upgrade",
+        help=COMMAND_HELP["upgrade"],
+        description=COMMAND_HELP["upgrade"],
+        formatter_class=HelpFormatter,
+    )
     upgrade.add_argument("version", nargs="?", help="Release tag, such as v0.4.0; defaults to latest")
     return parser
 

@@ -1,5 +1,5 @@
 from fdmcli.__main__ import build_parser
-from fdmcli.__main__ import Style
+from fdmcli.__main__ import HelpFormatter, Style
 from fdmcli.client import COMMANDS
 
 
@@ -53,3 +53,12 @@ def test_file_listing_aliases_are_available():
     assert parser.parse_args(["files"]).command == "files"
     assert parser.parse_args(["list"]).command == "list"
     assert parser.parse_args(["ls"]).command == "ls"
+
+
+def test_help_uses_organized_formatter():
+    parser = build_parser()
+    help_text = parser.format_help()
+    assert "commands:" in help_text
+    assert "connection:" in help_text
+    assert "output:" in help_text
+    assert isinstance(parser._get_formatter(), HelpFormatter)

@@ -85,7 +85,7 @@ Interactive output uses a compact terminal layout with colors, status highlights
 fdm --no-color status
 ```
 
-Run `fdm --help` or `fdm status --help` for built-in guidance. `info` is an alias for `attributes`, and `ls`/`list` are aliases for `files`. The older `--compact` flag remains accepted as an alias for `--json`.
+Run `fdm --help` or `fdm status --help` for built-in guidance. Help is organized into connection, output, and command sections. `info` is an alias for `attributes`, and `ls`/`list` are aliases for `files`. The older `--compact` flag remains accepted as an alias for `--json`.
 
 If you mistype a command, the CLI suggests the closest valid command. For example, use `fdm ls` or `fdm list` to list printer files.
 
