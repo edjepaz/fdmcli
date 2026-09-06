@@ -1,7 +1,7 @@
 from fdmcli.__main__ import _connection, build_parser
 from fdmcli.__main__ import HelpFormatter, Style, _file_page
 from fdmcli.client import COMMANDS
-from fdmcli.config import PrinterProfile, get_profile, profiles, save_profile, set_default
+from fdmcli.config import PrinterProfile, default_name, get_profile, profiles, save_profile, set_default
 
 
 def test_commands_have_expected_protocol_values():
@@ -95,6 +95,22 @@ def test_printer_profiles_persist(monkeypatch, tmp_path):
     set_default("garage")
     assert [item.name for item in profiles()] == ["garage", "home"]
     assert get_profile("garage").port == 3031
+
+
+def test_first_profile_becomes_default(monkeypatch, tmp_path):
+    monkeypatch.setenv("FDM_CONFIG", str(tmp_path / "config.json"))
+    save_profile(PrinterProfile("home", "192.168.1.249"))
+    assert default_name() == "home"
+
+
+def test_single_profile_without_default_is_used(monkeypatch, tmp_path):
+    monkeypatch.setenv("FDM_CONFIG", str(tmp_path / "config.json"))
+    save_profile(PrinterProfile("home", "192.168.1.249"))
+    config = tmp_path / "config.json"
+    config.write_text(config.read_text(encoding="utf-8").replace('"default": "home"', '"default": null'), encoding="utf-8")
+    monkeypatch.delenv("FDM_HOST", raising=False)
+    args = build_parser().parse_args(["status"])
+    assert _connection(args)[:3] == ("192.168.1.249", 3030, 10)
 
 
 def test_connection_requires_a_configured_printer(monkeypatch, tmp_path):

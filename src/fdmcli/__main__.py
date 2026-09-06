@@ -212,7 +212,16 @@ def _value(data: dict[str, Any], *keys: str, default: Any = None) -> Any:
 
 
 def _connection(args: argparse.Namespace) -> tuple[str, int, float, str | None]:
-    selected = get_profile(args.printer) if args.printer else (get_profile(default_name()) if default_name() else None)
+    saved = profiles()
+    configured_default = default_name()
+    if args.printer:
+        selected = get_profile(args.printer)
+    elif configured_default:
+        selected = get_profile(configured_default)
+    elif len(saved) == 1:
+        selected = saved[0]
+    else:
+        selected = None
     host = args.host or (selected.host if selected else os.getenv("FDM_HOST"))
     if not host:
         raise RuntimeError(

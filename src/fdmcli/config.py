@@ -80,7 +80,10 @@ def default_name() -> str | None:
 
 def save_profile(profile: PrinterProfile) -> None:
     data = _read()
+    first_profile = not data["printers"]
     data["printers"][profile.name] = profile.as_dict()
+    if first_profile or not data.get("default"):
+        data["default"] = profile.name
     _write(data)
 
 
