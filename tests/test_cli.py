@@ -64,7 +64,25 @@ def test_help_uses_organized_formatter():
     assert "commands:" in help_text
     assert "connection:" in help_text
     assert "output:" in help_text
+    assert "Printer selection:" in help_text
+    assert "FDM_HOST" in help_text
+    assert "fdm printer add home --host PRINTER_IP" in help_text
     assert isinstance(parser._get_formatter(), HelpFormatter)
+
+
+def test_command_help_explains_file_pagination_and_print_safety():
+    parser = build_parser()
+    assert "case-insensitive filename filter" in parser._subparsers._group_actions[0].choices["files"].format_help()
+    assert "real print" in parser._subparsers._group_actions[0].choices["print"].format_help()
+
+
+def test_printer_help_documents_profile_workflow():
+    parser = build_parser()
+    printer_help = parser._subparsers._group_actions[0].choices["printer"].format_help()
+    add_help = parser._subparsers._group_actions[0].choices["printer"]._subparsers._group_actions[0].choices["add"].format_help()
+    assert "first added profile becomes the default" in printer_help
+    assert "Profile name, such as home" in add_help
+    assert "--timeout SECONDS" in add_help
 
 
 def test_file_search_and_pagination():
